@@ -1,0 +1,34 @@
+
+
+## The context
+
+This presentation is being created as part of the peer assessment for the coursera developing data products class. 
+The assignment is geared toward ensuring the following concepts were well understood by the students -
+
+* shiny to build data product application
+* R-Presentation or slidify to create data product related presentations
+
+---
+## The Application
+
+To show the understanding of using shiny to build an application, a simple application was already built.
+
+* This application displays two plots to show the aggregated number of diabetes patients based on age or number of pregnants.
+* User can choose the age and number of pregnants from the sliders.
+
+The application can be found here: ?
+
+
+---
+## The Summary
+
+Interesting observations can be found by changing age and times pregnant inputs.
+
+This apllication has
+
+* widgets: slider
+* Operation on the ui input in sever.R
+* Reactive output, displayed as a result of server calculations
+* Documentation support
+  
+
