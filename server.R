@@ -1,17 +1,39 @@
+# app2
+ library(mlbench)
+ library(caret)
+ library(dplyr)
+ library(ggplot2)
+ data("PimaIndiansDiabetes")
 
-shinyUI(pageWithSidebar(
-	headerPanel("Plot PimaIndiansDiabetes"),
+
+shinyServer(
+function(input, output) {
   
-	sidebarPanel(
-  	sliderInput('inputAge', 'Select Age', value = 50, min = 20, max = 70, step = 5),
-  	sliderInput('preg', 'Select Number of Pregnants', value = 2, min = 1, max = 17, step = 1)
-	),
+	output$plot2 <- renderPlot({
+	  inputAge <- input$inputAge
+	  counts <- PimaIndiansDiabetes %>%
+	                filter(age < inputAge) %>%
+	                group_by(diabetes, age) %>%
+	                summarise(count=n())
+	  
+	  
+	  ggplot(counts, aes(x= age, y=count, fill=diabetes)) + geom_bar(stat="identity", position=position_dodge()) +
+	    xlab("Age") + ylab("Count")
+	    
+	  
+	  # , counts, type='l' , xlab='age', col='blue', main='Pos Cases by Age')
+	  
+	})
 	
-	mainPanel(
-	  h3('Aggregated number of positive and negrative cases for each age'), 
-  	plotOutput('plot2'),
-	  h3('Aggregated number of positive and negrative cases for number of pregnants'), 
-	  plotOutput('pregPlot')
-	)
-	
-))
+	output$pregPlot <- renderPlot({
+	  preg <- input$preg
+	  pregCounts <- PimaIndiansDiabetes %>%
+	    filter(pregnant < preg) %>%
+	    group_by(diabetes, pregnant) %>%
+	    summarise(count=n())
+
+	  ggplot(pregCounts, aes(x=pregnant, y=count, fill=diabetes)) + geom_bar(stat="identity", position=position_dodge())+
+	  xlab("Number of times pregnant") + ylab("Count")
+	})
+	  
+})
