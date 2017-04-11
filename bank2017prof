@@ -1,0 +1,7 @@
+employee_type_cd count min_age max_age
+             (chr) (int)   (dbl)   (dbl)
+1              AVP  2154      28      69
+2               ED   232      34      63
+3         SNRASSOC  1253      25      64
+4              SVP   748      32      70
+5               VP  2088      29      66
