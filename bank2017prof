@@ -5,3 +5,16 @@ employee_type_cd count min_age max_age
 3         SNRASSOC  1253      25      64
 4              SVP   748      32      70
 5               VP  2088      29      66
+
+
+ summary(emdf[emdf$employee_type_cd== 'VP', ]$age)
+   Min. 1st Qu.  Median    Mean 3rd Qu.    Max.    NA's 
+  29.00   38.00   42.00   42.72   46.00   66.00    3238 
+> summary(emdf[emdf$employee_type_cd== 'AVP', ]$age)
+   Min. 1st Qu.  Median    Mean 3rd Qu.    Max.    NA's 
+  28.00   35.00   38.00   40.15   44.00   69.00    3237 
+> summary(emdf[emdf$employee_type_cd== 'SVP', ]$age)
+   Min. 1st Qu.  Median    Mean 3rd Qu.    Max.    NA's 
+  32.00   41.00   45.00   45.85   50.00   70.00    3215 
+> dim(emdf)
+[1] 18625    49
