@@ -1,0 +1,754 @@
+#' @name plotting-helpers
+#' @aliases subsetPredictions getAccPoints getMaxAcc getROCPoints getAUCs
+#'  getFScores getMaxFScores plot_metric
+#' @title Helper functions for plotting the testing results.
+#' @description 8 helper functions called by \code{plotResultsBinary} and 
+#'  \code{plotResultsMulticlass}.
+#' @author Jo-Anne Tan
+NULL
+
+#' \subsection{\code{subsetPredictions}}{Create prediction objects for a single
+#' test quarter.}
+#' @param all_predictions Data frame, initialised after calling
+#' \code{createPredictionsDF(...)} and filled in after each test run, with at
+#' 2 columns: \code{key}, and \code{test_on} (the quarter ID), and columns for
+#' the class probabilities.
+#' @param i Index for the current run in the \code{testQuarters} vector.
+#' @param testQuarters Character vectors with all the testing quarters.
+#' @return \subsection{\code{subsetPredictions}}{A prediction object for use with
+#' ROCR's classifier evaluation, for just the test data from the quarter in 
+#' \code{testQuarters} indexed by \code{i}.}
+#' @rdname plotting-helpers
+
+subsetPredictions <- function(all_predictions, i, testQuarters) {
+  predictions.subset <- subset(all_predictions, test_on == testQuarters[i])
+  
+  if (length(unique(predictions.subset$label)) > 1) {
+    prediction(
+      predictions.subset$prediction,
+      predictions.subset$label,
+      label.ordering = c("0", setdiff(levels(predictions.subset$label), "0"))
+    )
+  } else {
+    prediction(predictions.subset$prediction, predictions.subset$label)
+  }
+}
+
+#' \subsection{\code{getAccPoints}}{Get data for plotting accuracy curves for a
+#'  single test quarter.}
+#' @inheritParams subsetPredictions
+#' @return \subsection{\code{getAccPoints}}{Data frame with the \code{quarterID}, 
+#' cutoffs (\code{x}), and accuracies (\code{y})).}
+#' @rdname plotting-helpers
+
+getAccPoints <- function(all_predictions, i, testQuarters) {
+  tmp <- subsetPredictions(all_predictions, i, testQuarters)
+  perf_acc <- performance(tmp, "acc")
+  
+  data.frame(
+    test_on = testQuarters[i],
+    Cutoff = perf_acc@x.values[[1]],
+    Accuracy = perf_acc@y.values[[1]],
+    stringsAsFactors = FALSE
+  )
+}
+
+#' \subsection{\code{getMaxAcc}}{Get maximum accuracy for a single test quarter.}
+#' @inheritParams subsetPredictions
+#' @return \subsection{\code{getAccPoints}}{The cutoff (\code{x}) at which the
+#' accuracy is maximised for the test quarter.}
+#' @rdname plotting-helpers
+
+getMaxAcc <- function(all_predictions, i, testQuarters) {
+  tmp <- subsetPredictions(all_predictions, i, testQuarters)
+  perf_acc <- performance(tmp, "acc")
+  cutoff <- which.max(perf_acc@y.values[[1]])
+  
+  perf_acc@y.values[[1]][cutoff]
+}
+
+#' \subsection{\code{getROCPoints}}{Get data for plotting ROC curves for a single
+#'  test quarter.}
+#' @inheritParams subsetPredictions
+#' @return \subsection{\code{getROCPoints}}{Data frame with the \code{quarterID},
+#'  fpp (\code{x}), and tpr (\code{y}).}
+#' @rdname plotting-helpers
+
+getROCPoints <- function(all_predictions, i, testQuarters) {
+  tmp <- subsetPredictions(all_predictions, i, testQuarters)
+  perf_roc <- performance(tmp, "tpr", "fpr")
+  
+  data.frame(
+    test_on = testQuarters[i],
+    fpp = perf_roc@x.values[[1]],
+    tpr = perf_roc@y.values[[1]],
+    stringsAsFactors = FALSE
+  )
+}
+
+#' \subsection{\code{getAUCs}}{Get AUC for a single test quarter.}
+#' @inheritParams subsetPredictions
+#' @return \subsection{\code{getAUCs}}{The AUC for the test quarter.}
+#' @rdname plotting-helpers
+
+getAUCs <- function(all_predictions, i, testQuarters) {
+  tmp <- subsetPredictions(all_predictions, i, testQuarters)
+  performance(tmp, "auc")@y.values[[1]]
+}
+
+#' \subsection{\code{getFScores}}{Get data for plotting F score curve for a
+#' single test quarter.}
+#' @inheritParams subsetPredictions
+#' @return \subsection{\code{getFScores}}{Data frame with the \code{quarterId},
+#'  cutoffs (\code{x}), and f scores (\code{y}).}
+#' @rdname plotting-helpers
+
+getFScores <- function(all_predictions, i, testQuarters) {
+  tmp <- subsetPredictions(all_predictions, i, testQuarters)
+  perf_f2 <- performance(tmp, "f")
+  cutoff <- which.max(perf_f2@y.values[[1]])
+  f.max <- round(perf_f2@y.values[[1]][cutoff], 3)
+  f.max_cutoff <- round(perf_f2@x.values[[1]][cutoff], 3)
+  
+  data.frame(
+    test_on = testQuarters[i],
+    cutoff = perf_f2@x.values[[1]],
+    f = perf_f2@y.values[[1]],
+    stringsAsFactors = FALSE
+  )
+}
+
+#' \subsection{\code{getMaxFScores}}{Get maximum F score for a single test quarter.}
+#' @inheritParams subsetPredictions
+#' @return \subsection{\code{getMaxFScores}}{List with the cutoff point (\code{x})
+#' for the maximum F score and the maximum score (\code{y}).}
+#' @rdname plotting-helpers
+
+getMaxFScores <- function(all_predictions, i, testQuarters) {
+  tmp <- subsetPredictions(all_predictions, i, testQuarters)
+  perf_f2 <- performance(tmp, "f")
+  cutoff <- which.max(perf_f2@y.values[[1]])
+  
+  list(perf_f2@y.values[[1]][cutoff], perf_f2@x.values[[1]][cutoff])
+}
+
+#' \subsection{\code{plot_metric}}{Save plot to results directory.}
+#' @param metric_name String containing the name to give the output plot.
+#' @param results_dir Results directory.
+#' @return \subsection{\code{plot_metric}}{Graphics device for PNG file in the
+#' specified results directory, where the file is named \code{[metric_name].png}.}
+#' @rdname plotting-helpers
+
+plot_metric <- function(metric_name, results_dir, ...) {
+  filename <- paste0(
+    results_dir,
+    "/",
+    metric_name,
+    ".png"
+  )
+  png(filename, ...)
+}
+
+#' Plot all results for a binary classification problem.
+#'
+#' @details Using the results from the \code{all_predictions} data frame (containing
+#' class probabilities and the true labels), the accuracy curve, ROC curve,
+#' F-measure curve, and the precision-recall curve are generated and saved to
+#' the results directory. Where the filename ends with \code{separate.png}, the
+#' curve is generated by calculating the various matrix for each test run/quarter
+#' separately. Other plots are generated by simply combining all the scores.
+#'
+#' @inheritParams subsetPredictions
+#' @inheritParams plot_metric
+#'
+#' @return Plots saved in the results directory given by \code{results_dir}.
+#' @family plotting-functions
+#' @author Jo-Anne Tan
+
+plotResultsBinary <- function(all_predictions, results_dir) {
+  all_predictions$label <- factor(all_predictions$label)
+  testQuarters <- unique(all_predictions$test_on)
+  # Removing quarters where there were no positive (risk) labels
+  labels <- data.frame(table(all_predictions$test_on, all_predictions$label))
+  quartersRm <- as.character(subset(labels, Var2 != "0" & Freq == 0)$Var1)
+  quartersRmIdx <- unname(sapply(quartersRm, function(x) which(testQuarters == x)))
+  if (length(quartersRmIdx) > 0) {
+    testQuartersRm <- testQuarters[-quartersRmIdx]
+    seqTest <- seq_along(testQuarters)[-quartersRmIdx]
+  } else {
+    testQuartersRm <- testQuarters
+    seqTest <- seq_along(testQuarters)
+  }
+  
+  # Plot accuracy curves
+  Acc_data <- do.call(
+    'rbind',
+    lapply(seq_along(testQuarters), function(x) getAccPoints(all_predictions, x, testQuarters))
+  )
+  Accmax_data <- sapply(seq_along(testQuarters),  function(x) getMaxAcc(all_predictions, x, testQuarters))
+  Accs <- paste(
+    testQuarters,
+    round(unlist(Accmax_data), 3),
+    sep = ": "
+  )
+  Acc_separate <- ggplot(Acc_data, aes(x = Cutoff, y = Accuracy, group = test_on)) +
+    geom_line(aes(colour = test_on)) +
+    scale_colour_discrete("Testing data: % no risk", labels = Accs) +
+    theme_bw() +
+    xlim(limits = c(0, 1))  +
+    xlab("Cutoff") +
+    ylab("Accuracy") +
+    theme(
+      legend.key = element_rect(colour = 'white')
+    )
+  ggsave(
+    paste0(results_dir,"/Acc_separate.png"),
+    Acc_separate,
+    width = 13,
+    height = 9.2,
+    units = "in",
+    scale = 0.6
+  )
+  
+  # Plot separate ROC curves
+  ROC_data <- do.call(
+    'rbind',
+    lapply(
+      seqTest,
+      function(x) getROCPoints(all_predictions, x, testQuarters)
+    )
+  )
+  ROC_reference <- data.frame(
+    x = c(0, 0, 1, 0, 0.5, 1),
+    y = c(0, 1, 1, 0, 0.5, 1),
+    type = c(rep("Best", 3), rep("Random", 3))
+  )
+  AUC_data <- sapply(
+    seqTest,
+    function(x) getAUCs(all_predictions, x, testQuarters)
+  )
+  AUCs <- paste(
+    testQuartersRm,
+    round(AUC_data, 3),
+    sep = ": "
+  )
+  ROC_separate <- ggplot(ROC_data, aes(x = fpp, y = tpr, group = test_on)) +
+    geom_line(aes(colour = test_on)) +
+    scale_colour_discrete("Testing data: AUC", labels = AUCs) +
+    geom_line(
+      data = ROC_reference,
+      aes(x = x, y = y, group = type),
+      lty = 2,
+      colour = 'darkgray'
+    ) +
+    theme_bw() +
+    xlim(limits = c(0, 1))  +
+    xlab("% of Branches Predicted to have Risk") +
+    ylab("% of Risks Correctly Predicted") +
+    theme(
+      legend.key = element_rect(colour = 'white')
+    ) +
+    ggtitle(paste("Average AUC:", round(mean(AUC_data), 3)))
+  ggsave(
+    paste0(results_dir,"/ROC_separate.png"),
+    ROC_separate,
+    width = 13,
+    height = 9.2,
+    units = "in",
+    scale = 0.6
+  )
+  
+  # Plot separate F-measure vs. cut-offs
+  F_data <- do.call(
+    'rbind',
+    lapply(
+      seqTest,
+      function(x) getFScores(all_predictions, x, testQuarters)
+    )
+  )
+  Fmax_data <- sapply(
+    seqTest,
+    function(x) getMaxFScores(all_predictions, x, testQuarters)
+  )
+  Fmaxes <- paste(
+    testQuartersRm,
+    round(unlist(Fmax_data[1, ]), 3),
+    sep = ": "
+  )
+  Fmax_points <- data.frame(
+    test_on = testQuartersRm,
+    y = unlist(Fmax_data[1, ]),
+    x = unlist(Fmax_data[2, ])
+  )
+  F_separate <- ggplot(F_data, aes(x = cutoff, y = f, group = test_on)) +
+    geom_line(aes(colour = test_on)) +
+    geom_point(data = Fmax_points, aes(x = x, y = y, colour = test_on), size = 2) +
+    scale_colour_discrete("Testing data: max F-score", labels = Fmaxes) +
+    theme_bw() +
+    xlim(limits = c(0, 1))  +
+    xlab("Cutoff") +
+    ylab("F-score") +
+    theme(
+      legend.key = element_rect(colour = 'white')
+    )
+  ggsave(
+    paste0(results_dir,"/F_separate.png"),
+    F_separate,
+    width = 13,
+    height = 9.2,
+    units = "in",
+    scale = 0.6
+  )
+  
+  # Combined
+  tmp <- prediction(all_predictions$prediction, all_predictions$label)
+  
+  perf_acc <- performance(tmp, "acc")
+  plot_metric("Acc", results_dir)
+  plot(perf_acc)
+  dev.off()
+  
+  # ROC curve
+  perf_auc1 <- performance(tmp, "tpr", "fpr")
+  AUC <- performance(tmp, "auc")@y.values[[1]]
+  plot_metric("ROC", results_dir)
+  plot(perf_auc1) +
+    lines(x = c(0, 1), y = c(0, 1), col = "darkgrey", lty = 2) +
+    lines(x = c(0, 0, 1), y = c(0, 1, 1), col = "red", lty = 2) +
+    text(x = 0.8, y = 0.2, labels = bquote(.(paste("AUC =", round(AUC, 4)))))
+  dev.off()
+  
+  perf_f2 <- performance(tmp, "f")
+  cutoff <- which.max(perf_f2@y.values[[1]])
+  f.max <- round(perf_f2@y.values[[1]][cutoff], 3)
+  f.max_cutoff <- round(perf_f2@x.values[[1]][cutoff], 3)
+  plot_metric("F", results_dir)
+  plot(perf_f2) + points(x = f.max_cutoff, y = f.max, col = 'blue', lwd = 2) +
+    title(
+      sub = bquote(.(paste0("Max F measure = ", f.max, " (cutoff at ", f.max_cutoff, ")"))),
+      col.sub = 'blue'
+    )
+  dev.off()
+  
+  # Precision-recall curve
+  perf_pr3 <- performance(tmp, "prec", "rec")
+  plot_metric("PR", results_dir)
+  plot(perf_pr3)
+  dev.off()
+  
+  #   # Gain chart
+  #   perf_pr4 <- performance(tmp, "tpr", "rpp")
+  #   freq <- data.frame(table(testLabels))
+  #   prop <- freq[which(freq$Var1 != 0), "Freq"] / sum(freq$Freq)
+  #   plot_metric("gain", results_dir)
+  #   plot(perf_pr4) +
+  #     lines(x = c(0, 1), y = c(0, 1), col = "darkgrey", lty = 2) +
+  #     lines(x = c(0, prop, 1), y = c(0, 1, 1), col = "red", lty = 2)
+  #   dev.off()
+  
+  # Sensitivity-spacifity curve
+  perf_ss5 <- performance(tmp, "sens", "spec")
+  plot_metric("SS", results_dir)
+  plot(perf_ss5)
+  dev.off()
+}
+
+#' Plot all results for a multiclass classification problem.
+#'
+#' @details Using the results from the \code{all_predictions} data frame (containing
+#' class probabilities and the true labels), the accuracy curve, ROC curve,
+#' F-measure curve, and the precision-recall curve are generated and saved to
+#' the results directory. Where the filename ends with \code{separate.png}, the
+#' curve is generated by calculating the various matrix for each test run/quarter
+#' separately. Other plots are generated by simply combining all the scores.
+#'
+#' @inheritParams subsetPredictions
+#' @inheritParams plot_metric
+#'
+#' @return Plots saved in the results directory given by \code{results_dir}.
+#' @family plotting-functions
+#' @author Jo-Anne Tan
+
+plotResultsMulticlass <- function(all_predictions, results_dir) {
+  predictions <- setdiff(names(all_predictions), c("key", "test_on", "label"))
+  testQuarters <- unique(all_predictions$test_on)
+  
+  Acc_data <- data.frame()
+  tmp <- paste0("data.frame(testQuarters, ", paste(rep(NA, length(predictions)), collapse = ", "), ")")
+  Accs <- eval(parse(text=tmp))
+  
+  ROC_data <- data.frame()
+  AUCs <- eval(parse(text=tmp))
+  
+  F_data <- data.frame()
+  Fmaxes <- eval(parse(text=tmp))
+  Fmax_points <- data.frame()
+  
+  for (labelIdx in seq_len(length(predictions))) {
+    label <- sub("^prediction_", "", predictions[labelIdx])
+    
+    all_predictions_relabel <- data.frame(
+      test_on = all_predictions$test_on,
+      prediction = all_predictions[, predictions[labelIdx]],
+      label = as.factor(unname(sapply(
+        as.character(all_predictions$label),
+        function(x) ifelse(x == label, label, 0)
+      )))
+    )
+    
+    # Removing quarters where there were no positive (risk) labels
+    labels <- data.frame(table(all_predictions_relabel$test_on, all_predictions_relabel$label))
+    quartersRm <- as.character(subset(labels, Var2 != "0" & Freq == 0)$Var1)
+    quartersRmIdx <- unname(sapply(quartersRm, function(x) which(testQuarters == x)))
+    if (length(quartersRmIdx) > 0) {
+      testQuartersRm <- testQuarters[-quartersRmIdx]
+      seqTest <- seq_along(testQuarters)[-quartersRmIdx]
+    } else {
+      testQuartersRm <- testQuarters
+      seqTest <- seq_along(testQuartersRm)
+    }
+    
+    # Plot accuracy curves
+    Acc_data.tmp <- do.call(
+      'rbind',
+      lapply(seq_along(testQuarters), function(x) getAccPoints(all_predictions_relabel, x, testQuarters))
+    )
+    Acc_data.tmp$prediction_label <- label
+    Acc_data <- rbind(Acc_data, Acc_data.tmp)
+    
+    Accmax_data <- sapply(seq_along(testQuarters),  function(x) getMaxAcc(all_predictions_relabel, x, testQuarters))
+    Accs[, labelIdx+1] <- paste0(round(unlist(Accmax_data), 3), "(", label, ")")
+    
+    
+    # Plot separate ROC curves
+    ROC_data.tmp <- do.call(
+      'rbind',
+      lapply(
+        seqTest,
+        function(x) getROCPoints(all_predictions_relabel, x, testQuarters)
+      )
+    )
+    ROC_data.tmp$prediction_label <- label
+    ROC_data <- rbind(ROC_data, ROC_data.tmp)
+    
+    AUC_data <- sapply(
+      seqTest,
+      function(x) getAUCs(all_predictions_relabel, x, testQuarters)
+    )
+    AUCs[seqTest, labelIdx+1] <- paste0(round(unlist(AUC_data), 3), "(", label, ")")
+    
+    # Plot separate F-measure vs. cut-offs
+    F_data.tmp <- do.call(
+      'rbind',
+      lapply(
+        seqTest,
+        function(x) getFScores(all_predictions_relabel, x, testQuarters)
+      )
+    )
+    F_data.tmp$prediction_label <- label
+    F_data <- rbind(F_data, F_data.tmp)
+    
+    Fmax_data <- sapply(
+      seqTest,
+      function(x) getMaxFScores(all_predictions_relabel, x, testQuarters)
+    )
+    Fmaxes[seqTest, labelIdx+1] <- paste0(round(unlist(Fmax_data[1, ]), 3), "(", label, ")")
+    
+    Fmax_points.tmp <- data.frame(
+      test_on = testQuartersRm,
+      y = unlist(Fmax_data[1, ]),
+      x = unlist(Fmax_data[2, ])
+    )
+    Fmax_points.tmp$prediction_label <- label
+    Fmax_points <- rbind(Fmax_points, Fmax_points.tmp)
+    
+    # Combined
+    tmp <- prediction(all_predictions_relabel$prediction, all_predictions_relabel$label)
+    
+    perf_acc <- performance(tmp, "acc")
+    plot(perf_acc)
+    
+    # ROC curve
+    perf_auc1 <- performance(tmp, "tpr", "fpr")
+    AUC <- performance(tmp, "auc")@y.values[[1]]
+    plot_metric(paste("ROC", label, sep = "-"), results_dir)
+    plot(perf_auc1) +
+      lines(x = c(0, 1), y = c(0, 1), col = "darkgrey", lty = 2) +
+      lines(x = c(0, 0, 1), y = c(0, 1, 1), col = "red", lty = 2) +
+      text(x = 0.8, y = 0.2, labels = bquote(.(paste("AUC =", round(AUC, 4)))))
+    dev.off()
+    
+    perf_f2 <- performance(tmp, "f")
+    cutoff <- which.max(perf_f2@y.values[[1]])
+    f.max <- round(perf_f2@y.values[[1]][cutoff], 3)
+    f.max_cutoff <- round(perf_f2@x.values[[1]][cutoff], 3)
+    plot_metric(paste("F", label, sep = "-"), results_dir)
+    plot(perf_f2) + points(x = f.max_cutoff, y = f.max, col = 'blue', lwd = 2) +
+      title(
+        sub = bquote(.(paste0("Max F measure = ", f.max, " (cutoff at ", f.max_cutoff, ")"))),
+        col.sub = 'blue'
+      )
+    dev.off()
+    
+    # Precision-recall curve
+    perf_pr3 <- performance(tmp, "prec", "rec")
+    plot_metric(paste("PR", label, sep = "-"), results_dir)
+    plot(perf_pr3)
+    dev.off()
+    
+    #     # Gain chart
+    #     perf_pr4 <- performance(tmp, "tpr", "rpp")
+    #     freq <- data.frame(table(testY))
+    #     prop <- freq[which(freq$testY != 0), "Freq"] / sum(freq$Freq)
+    #     plot_metric(paste("gain", label, sep = "-"), results_dir)
+    #     plot(perf_pr4) +
+    #       lines(x = c(0, 1), y = c(0, 1), col = "darkgrey", lty = 2) +
+    #       lines(x = c(0, prop, 1), y = c(0, 1, 1), col = "red", lty = 2)
+    #     dev.off()
+    
+    # Sensitivity-spacifity curve
+    perf_ss5 <- performance(tmp, "sens", "spec")
+    plot_metric(paste("SS", label, sep = "-"), results_dir)
+    plot(perf_ss5)
+    dev.off()
+  }
+  
+  # Plot accuracy curves
+  Acc_separate <- ggplot(Acc_data, aes(x = Cutoff, y = Accuracy, group = test_on)) +
+    geom_line(aes(colour = test_on)) +
+    scale_colour_discrete(
+      "Testing data: % no risk",
+      labels = apply(
+        Accs,
+        1,
+        function(x) paste(x[1], paste(x[-1], collapse=" "), sep = ": "))
+    ) +
+    theme_bw() +
+    xlim(limits = c(0, 1))  +
+    xlab("Cutoff") +
+    ylab("Accuracy") +
+    theme(
+      legend.key = element_rect(colour = 'white'),
+      legend.position = 'bottom'
+    ) +
+    guides(col = guide_legend(ncol = 2)) +
+    facet_wrap(~ prediction_label)
+  
+  ggsave(
+    paste0(results_dir,"/Acc_separate.png"),
+    Acc_separate,
+    width = 14,
+    height = 10,
+    units = "in",
+    scale = 0.6
+  )
+  
+  # Plot separate ROC curves
+  ROC_reference <- data.frame(
+    x = c(0, 0, 1, 0, 0.5, 1),
+    y = c(0, 1, 1, 0, 0.5, 1),
+    type = c(rep("Best", 3), rep("Random", 3))
+  )
+  ROC_separate <- ggplot(ROC_data, aes(x = fpp, y = tpr, group = test_on)) +
+    geom_line(aes(colour = test_on)) +
+    scale_colour_discrete(
+      "Testing data: AUCs",
+      labels = apply(
+        AUCs,
+        1,
+        function(x) paste(x[1], paste(x[-1], collapse=" "), sep = ": "))
+    ) +
+    geom_line(
+      data = ROC_reference,
+      aes(x = x, y = y, group = type),
+      lty = 2,
+      colour = 'darkgray'
+    ) +
+    theme_bw() +
+    xlim(limits = c(0, 1))  +
+    xlab("% of Branches Predicted to have Risk") +
+    ylab("% of Risks Correctly Predicted") +
+    theme(
+      legend.key = element_rect(colour = 'white'),
+      legend.text = element_text(size = rel(0.8)),
+      legend.position = 'bottom'
+    ) +
+    guides(col = guide_legend(ncol = 2)) +
+    facet_wrap(~ prediction_label) +
+    ggtitle(paste("Average AUCs:", paste(
+      apply(AUCs[, -1], 2, function(x) {
+        tmp <- x[which.max(sapply(x, nchar))]
+        model <- substr(tmp, nchar(tmp) - 2, nchar(tmp))
+        toAverage <- x[!is.na(x)]
+        avg <- round(mean(as.numeric(
+          sapply(x[!is.na(x)], function(y) strsplit(y, "\\([A-Z]\\)")[[1]])
+        )), 3)
+        
+        paste(avg, model)
+      }),
+      collapse = ", ")
+    ))
+  
+  ggsave(
+    paste0(results_dir,"/ROC_separate.png"),
+    ROC_separate,
+    width = 14,
+    height = 10,
+    units = "in",
+    scale = 0.6
+  )
+  
+  # Plot multiclass AUC
+  .getClassP <- function(all_predictions_row) {
+    all_predictions_row[, paste0("prediction_", all_predictions_row$label)]
+  }
+  allClassP <- lapply(testQuartersRm, function(x) {
+    perQuarter <- subset(all_predictions, test_on == x)
+    data.frame(
+      classP = sapply(
+        seq_len(nrow(perQuarter)),
+        function(y) .getClassP(perQuarter[y, ])
+      ),
+      label = factor(perQuarter$label)
+    )
+  })
+  for (i in 1:length(allClassP)) {
+    multiclass.roc(allClassP[[i]]$label, allClassP[[i]]$classP)
+  }
+  multiclassROC <- lapply(allClassP, function(x) multiclass.roc(x$label, x$classP, plot = TRUE))
+  .ggColours <- function(n) {
+    hues = seq(15, 375, length = n+1)
+    hcl(h = hues, l = 65, c = 100)[1:n]
+  }
+  title <- multiclass.roc(
+    unlist(lapply(allClassP, function(x) x$label)),
+    unlist(lapply(allClassP, function(x) x$classP))
+  )$auc
+  
+  plot_metric("ROC_multi", results_dir, width = 800, height = 600, units = "px")
+  for (i in 1:length(allClassP)) {
+    multiclass.roc(
+      allClassP[[i]]$label,
+      allClassP[[i]]$classP,
+      plot = TRUE,
+      add = ifelse(i == 1, FALSE, TRUE),
+      print.auc = TRUE,
+      print.auc.pattern = paste0(testQuarters[i], ": %.3f"),
+      print.auc.adj = c(0, 1),
+      print.auc.y = 0.6 - (i/15),
+      print.auc.x = 0.1,
+      col = .ggColours(length(allClassP))[i],
+      main = paste("Multi-class area under the curve:", round(title, 3)),
+      xlab = "% of Branches Predicted to have Risk",
+      ylab = "% of Risks Correctly Predicted",
+      print.auc.cex = 1.4
+    )
+  }
+  dev.off()
+  
+  # Plot separate F-measure vs. cut-offs
+  F_separate <- ggplot(F_data, aes(x = cutoff, y = f, group = test_on)) +
+    geom_line(aes(colour = test_on)) +
+    geom_point(data = Fmax_points, aes(x = x, y = y, colour = test_on), size = 2) +
+    scale_colour_discrete("Testing data: max F-score", labels = apply(
+      Accs,
+      1,
+      function(x) paste(x[1], paste(x[-1], collapse=" "), sep = ": ")
+    )
+    ) +
+    theme_bw() +
+    xlim(limits = c(0, 1))  +
+    xlab("Cutoff") +
+    ylab("F-score") +
+    theme(
+      legend.key = element_rect(colour = 'white'),
+      legend.position = "bottom"
+    ) +
+    guides(col = guide_legend(ncol = 2)) +
+    facet_wrap(~prediction_label)
+  
+  ggsave(
+    paste0(results_dir,"/F_separate.png"),
+    F_separate,
+    width = 14,
+    height = 10,
+    units = "in",
+    scale = 0.6
+  )
+}
+
+#' Write out confusion matrix and calculated accuracies
+#'
+#' @param all_predictions Data frame, initialised after calling
+#' createPredictionsDF() and filled in after each test run, with at least 2
+#' columns: 'key', and 'test_on' (the quarter ID), and columns for the class
+#' probabilities. 
+#' @param results_dir Results directory
+#'
+#' @return The file 'results.txt' in results_dir, with the confusion matrix
+#' generatedfrom the all_predictions data frame. Underneath it, a few
+#' classification metrics are printed: the overall and per-class accuracies, the
+#' per-class precisions, and the per-class recalls.
+#' @author Jo Anne
+
+printConfusionMatrixAndAccuracies <- function(all_predictions, resultsDir) {
+  .getPrediction <- function(all_predictions) {
+    predictions <- setdiff(names(all_predictions), c("key", "test_on", "label"))
+    tmp <- all_predictions[, predictions]
+    gsub("^prediction_", "", apply(tmp, 1, function(x) names(which.max(x))))
+  }
+  
+  confusionMatrix <- table(
+    predicted = factor(.getPrediction(all_predictions), levels = c('H', 'M', 'L')),
+    label = factor(all_predictions$label, levels = c('H', 'M', 'L'))
+  )
+  sink(file = paste0(resultsDir, "/results.txt"), append = FALSE)
+  print(confusionMatrix)
+  cat("\n")
+  
+  saveRDS(
+    confusionMatrix,
+    file = paste0(resultsDir, "/confusionMatrix.RDS")
+  )
+  
+  confusionMatrixDF <- as.data.frame(confusionMatrix)
+  
+  .calculateMetrics <- function(df, accuracyLabel) {
+    TP <- subset(df, predicted == accuracyLabel & label == accuracyLabel)[, "Freq"]
+    TN <- sum(subset(df, ! (predicted == accuracyLabel | label == accuracyLabel))[, "Freq"])
+    FP <- sum(subset(df, predicted == accuracyLabel)[, "Freq"]) - TP
+    FN <- sum(subset(df, label == accuracyLabel)[, "Freq"]) - TP
+    
+    list(TP = TP, TN = TN, FP = FP, FN = FN)
+  }
+  .calculateAccuracy <- function(l) (l$TP + l$TN) / (l$TP + l$TN + l$FP + l$FN)
+  .calculatePrecision <- function(l) l$TP / (l$TP + l$FP)
+  .calculateRecall <- function(l) l$TP / (l$TP + l$FN)
+  
+  overallAccuracy <- sum(subset(confusionMatrixDF, predicted == label)[, "Freq"]) /
+    sum(confusionMatrixDF$Freq)
+  cat("Overall accuracy: ", round(overallAccuracy, 3), " ")
+  cat("(", round(overallAccuracy - 1/3, 4)*100, "% higher than random guessing) \n\n", sep = "")
+  cat("Per-class accuracy: ")
+  perClassAccuracies <- unname(sapply(c('H', 'M', 'L'), function(x) {
+    round(.calculateAccuracy(.calculateMetrics(confusionMatrixDF, x)), 3)
+  }))
+  cat(paste(c('H', 'M', 'L'), "=", perClassAccuracies, sep = "", collapse = ", "))
+  cat("\nAverage accuracy: ", mean(perClassAccuracies), "\n\n")
+  
+  cat("Per-class precision: ")
+  perClassPrecisions <- unname(sapply(c('H', 'M', 'L'), function(x) {
+    round(.calculatePrecision(.calculateMetrics(confusionMatrixDF, x)), 3)
+  }))
+  cat(paste(c('H', 'M', 'L'), "=", perClassPrecisions, sep = "", collapse = ", "))
+  cat("\nAverage precision: ", mean(perClassPrecisions), "\n\n")
+  
+  cat("Per-class recall: ")
+  perClassRecalls <- unname(sapply(c('H', 'M', 'L'), function(x) {
+    round(.calculateRecall(.calculateMetrics(confusionMatrixDF, x)), 3)
+  }))
+  cat(paste(c('H', 'M', 'L'), "=", perClassRecalls, sep = "", collapse = ", "))
+  cat("\nAverage recall: ", mean(perClassRecalls), "\n\n")
+  
+  sink()
+}
